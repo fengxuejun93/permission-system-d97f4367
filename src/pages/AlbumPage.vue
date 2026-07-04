@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { useSocialStore } from '@/stores/social'
 import { Eye, Users, Lock } from 'lucide-vue-next'
 import type { Visibility } from '@/data/mock'
 
+const router = useRouter()
 const store = useSocialStore()
 
 const visibilityOptions: { value: Visibility; label: string; icon: any; desc: string }[] = [
@@ -61,12 +63,15 @@ function getVisibilityBadgeColor(vis: Visibility) {
         :key="photo.id"
         class="bg-white rounded-lg shadow-sm overflow-hidden group"
       >
-        <!-- 照片 -->
-        <div class="relative aspect-[4/3] overflow-hidden">
+        <!-- 照片可点击进入详情 -->
+        <div
+          class="relative aspect-[4/3] overflow-hidden cursor-pointer"
+          @click="router.push(`/photo/${photo.id}`)"
+        >
           <img
             :src="photo.url"
             :alt="photo.caption"
-            class="w-full h-full object-cover"
+            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
             loading="lazy"
           />
           <!-- 可见性徽标 -->
@@ -79,7 +84,7 @@ function getVisibilityBadgeColor(vis: Visibility) {
 
         <!-- 信息区 -->
         <div class="p-3">
-          <p class="text-xs text-gray-700 mb-2 truncate">{{ photo.caption }}</p>
+          <p class="text-xs text-gray-700 mb-2 truncate cursor-pointer hover:text-[#4A7FB5]" @click="router.push(`/photo/${photo.id}`)">{{ photo.caption }}</p>
 
           <!-- 当前可见性标签 -->
           <div
@@ -91,7 +96,7 @@ function getVisibilityBadgeColor(vis: Visibility) {
           </div>
 
           <!-- 可见性切换 -->
-          <div class="flex gap-1">
+          <div class="flex gap-1" @click.stop>
             <button
               v-for="opt in visibilityOptions"
               :key="opt.value"
@@ -111,8 +116,6 @@ function getVisibilityBadgeColor(vis: Visibility) {
       </div>
     </div>
 
-    <div v-if="store.myPhotos.length === 0" class="text-center text-gray-400 py-12">
-      暂无照片
-    </div>
+    <div v-if="store.myPhotos.length === 0" class="text-center text-gray-400 py-12">暂无照片</div>
   </div>
 </template>

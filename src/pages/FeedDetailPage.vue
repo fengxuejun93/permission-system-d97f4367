@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSocialStore } from '@/stores/social'
-import { ArrowLeft, MessageSquare, Send, Lock, Eye } from 'lucide-vue-next'
+import { ArrowLeft, MessageSquare, Send, Lock, Eye, Heart, ThumbsUp, UserCircle } from 'lucide-vue-next'
 import type { Visibility } from '@/data/mock'
 
 const route = useRoute()
@@ -43,69 +43,87 @@ function getVisibilityColor(vis: Visibility) {
 }
 
 function getVisibilityIcon(vis: Visibility) {
-  switch (vis) {
-    case 'public': return Eye
-    case 'friends': return Lock
-    case 'self': return Lock
-  }
+  return vis === 'public' ? Eye : Lock
+}
+
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push('/')
 }
 </script>
 
 <template>
   <div v-if="detail">
-    <!-- 返回按钮 -->
-    <button
-      @click="router.push('/')"
-      class="flex items-center gap-1 text-sm text-[#4A7FB5] hover:text-[#1B3A5C] mb-4 transition-colors"
-    >
-      <ArrowLeft :size="16" />
-      <span>返回动态首页</span>
-    </button>
+    <!-- 顶部操作栏 -->
+    <div class="flex items-center justify-between mb-4">
+      <button @click="goBack" class="flex items-center gap-1 text-sm text-[#4A7FB5] hover:text-[#1B3A5C] transition-colors">
+        <ArrowLeft :size="16" /><span>返回</span>
+      </button>
+      <button
+        @click="router.push(`/classmate/${detail.authorId}`)"
+        class="flex items-center gap-1 text-xs text-[#4A7FB5] hover:text-[#1B3A5C]"
+      >
+        <UserCircle :size="14" /><span>查看作者资料</span>
+      </button>
+    </div>
 
-    <!-- 动态详情卡片 -->
+    <!-- 动态详情 -->
     <div class="bg-white rounded-lg shadow-sm p-5 mb-4">
       <div class="flex gap-3">
-        <div class="w-12 h-12 rounded-full bg-[#4A7FB5] flex items-center justify-center text-white font-bold flex-shrink-0">
+        <div
+          class="w-12 h-12 rounded-full bg-[#4A7FB5] flex items-center justify-center text-white font-bold flex-shrink-0 cursor-pointer hover:opacity-80"
+          @click="router.push(`/classmate/${detail.authorId}`)"
+        >
           {{ detail.author?.name.charAt(0) || '?' }}
         </div>
         <div class="flex-1">
           <div class="flex items-center gap-2">
-            <span class="text-base font-semibold text-[#1B3A5C]">{{ detail.author?.name }}</span>
+            <span
+              class="text-base font-semibold text-[#1B3A5C] cursor-pointer hover:text-[#4A7FB5]"
+              @click="router.push(`/classmate/${detail.authorId}`)"
+            >{{ detail.author?.name }}</span>
+            <span class="text-xs text-gray-400">{{ detail.author?.className }}</span>
+            <span class="text-xs text-gray-300">|</span>
             <span class="text-xs text-gray-400">{{ detail.createdAt }}</span>
+            <span
+              v-if="!store.isFriend(detail.authorId) && detail.authorId !== store.currentUser.id"
+              class="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded"
+            >非好友</span>
           </div>
           <p class="text-sm text-gray-700 mt-2 leading-relaxed">{{ detail.content }}</p>
 
           <!-- 照片展示 -->
           <div class="mt-4 space-y-3">
             <div v-for="photo in detail.photos" :key="photo.id" class="relative">
-              <div v-if="photo.canView">
-                <img
-                  :src="photo.url"
-                  :alt="photo.caption"
-                  class="max-w-full rounded-lg border border-gray-200"
-                  loading="lazy"
-                />
+              <div v-if="photo.canView" class="cursor-pointer" @click="router.push(`/photo/${photo.id}`)">
+                <img :src="photo.url" :alt="photo.caption" class="max-w-full rounded-lg border border-gray-200" loading="lazy" />
                 <div class="flex items-center justify-between mt-1">
                   <span class="text-xs text-gray-500">{{ photo.caption }}</span>
-                  <span
-                    class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
-                    :class="getVisibilityColor(photo.visibility)"
-                  >
+                  <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" :class="getVisibilityColor(photo.visibility)">
                     <component :is="getVisibilityIcon(photo.visibility)" :size="10" />
                     {{ photo.visibilityLabel }}
                   </span>
                 </div>
               </div>
-              <div v-else class="bg-gray-100 rounded-lg p-8 text-center">
-                <Lock :size="24" class="mx-auto text-gray-400 mb-2" />
-                <p class="text-sm text-gray-500">此照片仅{{ photo.visibilityLabel }}可见</p>
-                <span
-                  class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full mt-2"
-                  :class="getVisibilityColor(photo.visibility)"
-                >
+              <div v-else class="bg-gray-100 rounded-lg p-6 text-center cursor-pointer" @click="router.push(`/photo/${photo.id}`)">
+                <Lock :size="20" class="mx-auto text-gray-400 mb-1" />
+                <p class="text-xs text-gray-500">此照片仅{{ photo.visibilityLabel }}可见</p>
+                <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full mt-1" :class="getVisibilityColor(photo.visibility)">
                   {{ photo.visibilityLabel }}
                 </span>
               </div>
+            </div>
+          </div>
+
+          <!-- 互动栏 -->
+          <div class="flex items-center gap-5 mt-4 pt-3 border-t border-gray-100">
+            <button @click="store.toggleLike(feedId)" class="flex items-center gap-1.5 text-sm transition-colors" :class="detail.isLiked ? 'text-red-500' : 'text-gray-400 hover:text-red-400'">
+              <Heart :size="16" :fill="detail.isLiked ? 'currentColor' : 'none'" />
+              <span>{{ detail.likeCount }}</span>
+            </button>
+            <div class="flex items-center gap-1.5 text-sm text-gray-400">
+              <MessageSquare :size="16" />
+              <span>{{ detail.comments.length }}</span>
             </div>
           </div>
         </div>
@@ -115,78 +133,54 @@ function getVisibilityIcon(vis: Visibility) {
     <!-- 评论区 -->
     <div class="bg-white rounded-lg shadow-sm p-5">
       <h3 class="text-sm font-semibold text-[#1B3A5C] mb-4 flex items-center gap-2">
-        <MessageSquare :size="16" />
-        评论 ({{ detail.comments.length }})
+        <MessageSquare :size="16" /> 评论 ({{ detail.comments.length }})
       </h3>
 
       <!-- 发表评论 -->
       <div class="flex gap-2 mb-4">
-        <input
-          v-model="newComment"
-          type="text"
-          placeholder="发表评论..."
-          class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4A7FB5]"
-          @keyup.enter="submitComment"
-        />
-        <button
-          @click="submitComment"
-          :disabled="!newComment.trim()"
-          class="px-4 py-2 bg-[#4A7FB5] text-white text-sm rounded-lg hover:bg-[#1B3A5C] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
-        >
-          <Send :size="14" />
-          发表
+        <input v-model="newComment" type="text" placeholder="发表评论..." class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4A7FB5]" @keyup.enter="submitComment" />
+        <button @click="submitComment" :disabled="!newComment.trim()" class="px-4 py-2 bg-[#4A7FB5] text-white text-sm rounded-lg hover:bg-[#1B3A5C] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+          <Send :size="14" />发表
         </button>
       </div>
 
       <!-- 评论列表 -->
       <div class="space-y-4">
         <div v-for="comment in detail.comments" :key="comment.id" class="border-b border-gray-100 pb-3 last:border-0">
-          <!-- 评论主体 -->
           <div class="flex gap-2">
-            <div class="w-8 h-8 rounded-full bg-[#4A7FB5] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+            <div class="w-8 h-8 rounded-full bg-[#4A7FB5] flex items-center justify-center text-white text-xs font-bold flex-shrink-0 cursor-pointer" @click="router.push(`/classmate/${comment.authorId}`)">
               {{ comment.author?.name.charAt(0) || '?' }}
             </div>
             <div class="flex-1">
               <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-[#1B3A5C]">{{ comment.author?.name }}</span>
+                <span class="text-sm font-medium text-[#1B3A5C] cursor-pointer hover:text-[#4A7FB5]" @click="router.push(`/classmate/${comment.authorId}`)">{{ comment.author?.name }}</span>
                 <span class="text-xs text-gray-400">{{ comment.createdAt }}</span>
               </div>
               <p class="text-sm text-gray-700 mt-0.5">{{ comment.content }}</p>
-              <button
-                @click="startReply(comment.id)"
-                class="text-xs text-[#4A7FB5] hover:text-[#1B3A5C] mt-1"
-              >
-                回复
-              </button>
+              <div class="flex items-center gap-3 mt-1">
+                <button @click="startReply(comment.id)" class="text-xs text-[#4A7FB5] hover:text-[#1B3A5C]">回复</button>
+                <span class="flex items-center gap-0.5 text-xs text-gray-400">
+                  <ThumbsUp :size="10" />{{ comment.likeCount }}
+                </span>
+              </div>
 
-              <!-- 回复输入框 -->
+              <!-- 回复输入 -->
               <div v-if="replyTo === comment.id" class="flex gap-2 mt-2">
-                <input
-                  v-model="replyContent"
-                  type="text"
-                  :placeholder="`回复 ${comment.author?.name}...`"
-                  class="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#4A7FB5]"
-                  @keyup.enter="submitReply(comment.id)"
-                />
-                <button
-                  @click="submitReply(comment.id)"
-                  :disabled="!replyContent.trim()"
-                  class="px-3 py-1.5 bg-[#4A7FB5] text-white text-xs rounded hover:bg-[#1B3A5C] disabled:opacity-50 transition-colors"
-                >
-                  回复
-                </button>
+                <input v-model="replyContent" type="text" :placeholder="`回复 ${comment.author?.name}...`" class="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#4A7FB5]" @keyup.enter="submitReply(comment.id)" />
+                <button @click="submitReply(comment.id)" :disabled="!replyContent.trim()" class="px-3 py-1.5 bg-[#4A7FB5] text-white text-xs rounded hover:bg-[#1B3A5C] disabled:opacity-50 transition-colors">回复</button>
               </div>
 
               <!-- 回复列表 -->
               <div v-if="comment.replies.length > 0" class="mt-2 ml-4 pl-3 border-l-2 border-gray-100 space-y-2">
                 <div v-for="reply in comment.replies" :key="reply.id" class="flex gap-2">
-                  <div class="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs flex-shrink-0">
-                    {{ reply.author?.name.charAt(0) || '?' }}
-                  </div>
+                  <div class="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs flex-shrink-0 cursor-pointer" @click="router.push(`/classmate/${reply.authorId}`)">{{ reply.author?.name.charAt(0) || '?' }}</div>
                   <div>
-                    <span class="text-xs font-medium text-[#1B3A5C]">{{ reply.author?.name }}</span>
+                    <span class="text-xs font-medium text-[#1B3A5C] cursor-pointer hover:text-[#4A7FB5]" @click="router.push(`/classmate/${reply.authorId}`)">{{ reply.author?.name }}</span>
                     <span class="text-xs text-gray-700 ml-1">{{ reply.content }}</span>
-                    <div class="text-xs text-gray-400 mt-0.5">{{ reply.createdAt }}</div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span class="text-xs text-gray-400">{{ reply.createdAt }}</span>
+                      <span class="flex items-center gap-0.5 text-xs text-gray-400"><ThumbsUp :size="9" />{{ reply.likeCount }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -195,13 +189,9 @@ function getVisibilityIcon(vis: Visibility) {
         </div>
       </div>
 
-      <div v-if="detail.comments.length === 0" class="text-center text-gray-400 text-sm py-6">
-        暂无评论，快来抢沙发！
-      </div>
+      <div v-if="detail.comments.length === 0" class="text-center text-gray-400 text-sm py-6">暂无评论，快来抢沙发！</div>
     </div>
   </div>
 
-  <div v-else class="text-center text-gray-400 py-12">
-    动态不存在
-  </div>
+  <div v-else class="text-center text-gray-400 py-12">动态不存在</div>
 </template>

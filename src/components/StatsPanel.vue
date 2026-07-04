@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useSocialStore } from '@/stores/social'
-import { Users, Clock, Image, MessageSquare } from 'lucide-vue-next'
+import { Users, Clock, Image, MessageSquare, Heart } from 'lucide-vue-next'
 
 const store = useSocialStore()
 </script>
@@ -49,20 +49,31 @@ const store = useSocialStore()
           <div class="text-xs text-gray-500">评论/回复数</div>
         </div>
       </div>
+
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
+          <Heart :size="16" class="text-red-500" />
+        </div>
+        <div>
+          <div class="text-lg font-bold text-red-500">{{ store.totalLikeCount }}</div>
+          <div class="text-xs text-gray-500">获得点赞</div>
+        </div>
+      </div>
     </div>
 
     <!-- 好友列表快览 -->
     <div class="bg-white rounded-lg shadow-sm p-3">
       <h4 class="text-xs font-semibold text-[#1B3A5C] mb-2">我的好友 ({{ store.friendCount }})</h4>
       <div class="flex flex-wrap gap-1.5">
-        <div
+        <router-link
           v-for="friend in store.friendList"
           :key="friend.id"
-          class="w-8 h-8 rounded-full bg-[#4A7FB5] flex items-center justify-center text-white text-xs font-medium"
+          :to="`/classmate/${friend.id}`"
+          class="w-8 h-8 rounded-full bg-[#4A7FB5] flex items-center justify-center text-white text-xs font-medium hover:opacity-80"
           :title="friend.name"
         >
           {{ friend.name.charAt(0) }}
-        </div>
+        </router-link>
       </div>
     </div>
 
@@ -75,12 +86,12 @@ const store = useSocialStore()
           :key="req.id"
           class="flex items-center justify-between"
         >
-          <div class="flex items-center gap-2">
+          <router-link :to="`/classmate/${req.id}`" class="flex items-center gap-2 hover:opacity-80">
             <div class="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center text-xs text-orange-600">
               {{ req.name.charAt(0) }}
             </div>
             <span class="text-xs text-gray-700">{{ req.name }}</span>
-          </div>
+          </router-link>
           <div class="flex gap-1">
             <button
               @click="store.acceptFriend(req.id)"

@@ -2,12 +2,11 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSocialStore } from '@/stores/social'
-import { MessageSquare, Lock } from 'lucide-vue-next'
+import { MessageSquare, Lock, Heart, Eye } from 'lucide-vue-next'
 
 const router = useRouter()
 const store = useSocialStore()
 
-// 动态流（带照片和统计）
 const feedItems = computed(() =>
   store.feedList.map(feed => {
     const author = store.getUser(feed.authorId)
@@ -15,7 +14,9 @@ const feedItems = computed(() =>
     const allPhotos = store.getAllPhotosForFeed(feed.id)
     const hasRestricted = allPhotos.some(p => !p.canView)
     const commentCount = store.getCommentCount(feed.id)
-    return { ...feed, author, photos, allPhotos, hasRestricted, commentCount }
+    const likeCount = store.getLikeCount(feed.id)
+    const isLiked = store.isLikedByMe(feed.id)
+    return { ...feed, author, photos, allPhotos, hasRestricted, commentCount, likeCount, isLiked }
   })
 )
 </script>
@@ -39,6 +40,10 @@ const feedItems = computed(() =>
           <div class="text-2xl font-bold">{{ store.publicPhotoCount }}</div>
           <div class="text-xs text-blue-200">公开照片</div>
         </div>
+        <div class="text-center">
+          <div class="text-2xl font-bold text-red-300">{{ store.totalLikeCount }}</div>
+          <div class="text-xs text-blue-200">获赞</div>
+        </div>
       </div>
     </div>
 
@@ -51,37 +56,39 @@ const feedItems = computed(() =>
         @click="router.push(`/feed/${item.id}`)"
       >
         <div class="flex gap-3">
-          <!-- 头像 -->
-          <div class="w-10 h-10 rounded-full bg-[#4A7FB5] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+          <!-- 头像可跳转同学资料 -->
+          <div
+            class="w-10 h-10 rounded-full bg-[#4A7FB5] flex items-center justify-center text-white text-sm font-bold flex-shrink-0 hover:opacity-80"
+            @click.stop="router.push(`/classmate/${item.authorId}`)"
+          >
             {{ item.author?.name.charAt(0) || '?' }}
           </div>
 
           <div class="flex-1 min-w-0">
-            <!-- 用户名和时间 -->
             <div class="flex items-center gap-2">
-              <span class="text-sm font-semibold text-[#1B3A5C]">{{ item.author?.name }}</span>
+              <span
+                class="text-sm font-semibold text-[#1B3A5C] hover:text-[#4A7FB5] cursor-pointer"
+                @click.stop="router.push(`/classmate/${item.authorId}`)"
+              >{{ item.author?.name }}</span>
               <span class="text-xs text-gray-400">{{ item.createdAt }}</span>
               <span
                 v-if="!store.isFriend(item.authorId) && item.authorId !== store.currentUser.id"
                 class="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded"
-              >
-                非好友
-              </span>
+              >非好友</span>
             </div>
 
-            <!-- 内容 -->
             <p class="text-sm text-gray-700 mt-1">{{ item.content }}</p>
 
-            <!-- 照片缩略图 -->
+            <!-- 照片缩略图（可点击进照片详情） -->
             <div v-if="item.photos.length > 0" class="flex gap-2 mt-2">
-              <img
+              <div
                 v-for="photo in item.photos.slice(0, 3)"
                 :key="photo.id"
-                :src="photo.url"
-                :alt="photo.caption"
-                class="w-28 h-20 object-cover rounded border border-gray-200"
-                loading="lazy"
-              />
+                class="relative w-28 h-20 rounded overflow-hidden border border-gray-200 cursor-pointer hover:opacity-80"
+                @click.stop="router.push(`/photo/${photo.id}`)"
+              >
+                <img :src="photo.url" :alt="photo.caption" class="w-full h-full object-cover" loading="lazy" />
+              </div>
             </div>
 
             <!-- 权限提示 -->
@@ -90,11 +97,15 @@ const feedItems = computed(() =>
               <span>部分照片受权限保护</span>
             </div>
 
-            <!-- 底部信息 -->
+            <!-- 底部互动信息 -->
             <div class="flex items-center gap-4 mt-2">
+              <div class="flex items-center gap-1 text-xs" :class="item.isLiked ? 'text-red-500' : 'text-gray-400'">
+                <Heart :size="12" :fill="item.isLiked ? 'currentColor' : 'none'" />
+                <span>{{ item.likeCount }}</span>
+              </div>
               <div class="flex items-center gap-1 text-xs text-gray-400">
                 <MessageSquare :size="12" />
-                <span>{{ item.commentCount }} 条评论</span>
+                <span>{{ item.commentCount }}</span>
               </div>
             </div>
           </div>
@@ -102,8 +113,6 @@ const feedItems = computed(() =>
       </div>
     </div>
 
-    <div v-if="feedItems.length === 0" class="text-center text-gray-400 py-12">
-      暂无动态
-    </div>
+    <div v-if="feedItems.length === 0" class="text-center text-gray-400 py-12">暂无动态</div>
   </div>
 </template>

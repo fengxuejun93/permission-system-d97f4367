@@ -7,6 +7,7 @@ import {
   photos as mockPhotos,
   comments as mockComments,
   replies as mockReplies,
+  likes as mockLikes,
   CURRENT_USER_ID,
   type User,
   type Friendship,
@@ -14,27 +15,25 @@ import {
   type Photo,
   type Comment,
   type Reply,
+  type Like,
   type Visibility,
 } from '@/data/mock'
 
 export const useSocialStore = defineStore('social', () => {
-  // 响应式数据
   const users = ref<User[]>([...mockUsers])
   const friendships = ref<Friendship[]>([...mockFriendships])
   const feeds = ref<Feed[]>([...mockFeeds])
   const photos = ref<Photo[]>([...mockPhotos])
   const comments = ref<Comment[]>([...mockComments])
   const replies = ref<Reply[]>([...mockReplies])
+  const likes = ref<Like[]>([...mockLikes])
 
-  // 当前用户
   const currentUser = computed(() => users.value.find(u => u.id === CURRENT_USER_ID)!)
 
-  // 获取用户信息
   function getUser(id: string): User | undefined {
     return users.value.find(u => u.id === id)
   }
 
-  // 判断是否是好友（双向）
   function isFriend(userId: string): boolean {
     return friendships.value.some(
       f =>
@@ -44,7 +43,6 @@ export const useSocialStore = defineStore('social', () => {
     )
   }
 
-  // 获取好友关系状态
   function getFriendshipStatus(userId: string): 'none' | 'pending_sent' | 'pending_received' | 'accepted' {
     const f = friendships.value.find(
       f =>
@@ -57,15 +55,26 @@ export const useSocialStore = defineStore('social', () => {
     return 'pending_received'
   }
 
-  // 好友列表
+  // 获取某用户的所有好友ID
+  function getFriendIdsOf(userId: string): string[] {
+    return friendships.value
+      .filter(f => f.status === 'accepted' && (f.fromId === userId || f.toId === userId))
+      .map(f => (f.fromId === userId ? f.toId : f.fromId))
+  }
+
+  // 共同好友
+  function getMutualFriends(userId: string): User[] {
+    const myFriends = new Set(getFriendIdsOf(CURRENT_USER_ID))
+    const theirFriends = getFriendIdsOf(userId)
+    const mutualIds = theirFriends.filter(id => myFriends.has(id))
+    return users.value.filter(u => mutualIds.includes(u.id))
+  }
+
   const friendList = computed(() => {
-    const friendIds = friendships.value
-      .filter(f => f.status === 'accepted' && (f.fromId === CURRENT_USER_ID || f.toId === CURRENT_USER_ID))
-      .map(f => (f.fromId === CURRENT_USER_ID ? f.toId : f.fromId))
+    const friendIds = getFriendIdsOf(CURRENT_USER_ID)
     return users.value.filter(u => friendIds.includes(u.id))
   })
 
-  // 待处理请求（我收到的）
   const pendingReceived = computed(() => {
     const ids = friendships.value
       .filter(f => f.toId === CURRENT_USER_ID && f.status === 'pending')
@@ -73,7 +82,6 @@ export const useSocialStore = defineStore('social', () => {
     return users.value.filter(u => ids.includes(u.id))
   })
 
-  // 我发出的待处理请求
   const pendingSent = computed(() => {
     const ids = friendships.value
       .filter(f => f.fromId === CURRENT_USER_ID && f.status === 'pending')
@@ -81,72 +89,56 @@ export const useSocialStore = defineStore('social', () => {
     return users.value.filter(u => ids.includes(u.id))
   })
 
-  // 同学列表（除我以外所有人）
-  const classmateList = computed(() => {
-    return users.value.filter(u => u.id !== CURRENT_USER_ID)
-  })
+  const classmateList = computed(() => users.value.filter(u => u.id !== CURRENT_USER_ID))
 
-  // 统计数据
+  // 统计
   const friendCount = computed(() => friendList.value.length)
   const pendingRequestCount = computed(() => pendingReceived.value.length)
   const publicPhotoCount = computed(() =>
     photos.value.filter(p => p.visibility === 'public' && p.uploadedBy === CURRENT_USER_ID).length
   )
   const totalCommentCount = computed(() => {
-    // 我的所有动态的评论总数（含回复）
     const myFeedIds = feeds.value.filter(f => f.authorId === CURRENT_USER_ID).map(f => f.id)
-    const commentCount = comments.value.filter(c => myFeedIds.includes(c.feedId)).length
-    const replyCount = comments.value
+    const cCount = comments.value.filter(c => myFeedIds.includes(c.feedId)).length
+    const rCount = comments.value
       .filter(c => myFeedIds.includes(c.feedId))
-      .reduce((acc, c) => {
-        return acc + replies.value.filter(r => r.commentId === c.id).length
-      }, 0)
-    return commentCount + replyCount
+      .reduce((acc, c) => acc + replies.value.filter(r => r.commentId === c.id).length, 0)
+    return cCount + rCount
   })
+  const totalLikeCount = computed(() =>
+    likes.value.filter(l => {
+      const feed = feeds.value.find(f => f.id === l.feedId)
+      return feed && feed.authorId === CURRENT_USER_ID
+    }).length
+  )
 
-  // 动态流（好友动态+公开动态，按时间倒序）
-  const feedList = computed(() => {
-    const friendIds = new Set(friendList.value.map(u => u.id))
-    return feeds.value
-      .filter(f => {
-        if (f.authorId === CURRENT_USER_ID) return true
-        if (friendIds.has(f.authorId)) return true
-        // 非好友的公开动态也可见
-        return true
-      })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  })
+  // 动态流
+  const feedList = computed(() =>
+    feeds.value.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  )
+
+  // 照片可见性判断
+  function canViewPhoto(photo: Photo): boolean {
+    if (photo.uploadedBy === CURRENT_USER_ID) return true
+    if (photo.visibility === 'public') return true
+    if (photo.visibility === 'friends' && isFriend(photo.uploadedBy)) return true
+    return false
+  }
+
+  function getVisibilityLabel(vis: Visibility): string {
+    return vis === 'public' ? '公开' : vis === 'friends' ? '仅好友' : '仅自己'
+  }
 
   // 获取动态的可见照片
   function getVisiblePhotosForFeed(feedId: string): Photo[] {
-    const friendIds = new Set(friendList.value.map(u => u.id))
-    return photos.value.filter(p => {
-      if (p.feedId !== feedId) return false
-      if (p.uploadedBy === CURRENT_USER_ID) return true
-      if (p.visibility === 'public') return true
-      if (p.visibility === 'friends' && friendIds.has(p.uploadedBy)) return true
-      return false
-    })
+    return photos.value.filter(p => p.feedId === feedId && canViewPhoto(p))
   }
 
   // 获取动态的所有照片（含不可见标记）
   function getAllPhotosForFeed(feedId: string): (Photo & { canView: boolean; visibilityLabel: string })[] {
-    const friendIds = new Set(friendList.value.map(u => u.id))
     return photos.value
       .filter(p => p.feedId === feedId)
-      .map(p => {
-        const canView =
-          p.uploadedBy === CURRENT_USER_ID ||
-          p.visibility === 'public' ||
-          (p.visibility === 'friends' && friendIds.has(p.uploadedBy))
-        const visibilityLabel =
-          p.visibility === 'public'
-            ? '公开'
-            : p.visibility === 'friends'
-              ? '仅好友'
-              : '仅自己'
-        return { ...p, canView, visibilityLabel }
-      })
+      .map(p => ({ ...p, canView: canViewPhoto(p), visibilityLabel: getVisibilityLabel(p.visibility) }))
   }
 
   // 获取动态详情
@@ -157,14 +149,73 @@ export const useSocialStore = defineStore('social', () => {
     const feedPhotos = getAllPhotosForFeed(feedId)
     const feedComments = comments.value
       .filter(c => c.feedId === feedId)
-      .map(c => {
-        const author = getUser(c.authorId)
-        const commentReplies = replies.value
+      .map(c => ({
+        ...c,
+        author: getUser(c.authorId),
+        replies: replies.value
           .filter(r => r.commentId === c.id)
-          .map(r => ({ ...r, author: getUser(r.authorId) }))
-        return { ...c, author, replies: commentReplies }
-      })
-    return { ...feed, author, photos: feedPhotos, comments: feedComments }
+          .map(r => ({ ...r, author: getUser(r.authorId) })),
+      }))
+    const isLiked = likes.value.some(l => l.feedId === feedId && l.userId === CURRENT_USER_ID)
+    const likeCount = likes.value.filter(l => l.feedId === feedId).length
+    return { ...feed, author, photos: feedPhotos, comments: feedComments, isLiked, likeCount }
+  }
+
+  // 获取照片详情
+  function getPhotoDetail(photoId: string) {
+    const photo = photos.value.find(p => p.id === photoId)
+    if (!photo) return null
+    const canView = canViewPhoto(photo)
+    const uploader = getUser(photo.uploadedBy)
+    const feed = feeds.value.find(f => f.id === photo.feedId)
+    // 照片评论复用其所属动态的评论
+    const photoComments = feed
+      ? comments.value
+          .filter(c => c.feedId === feed.id)
+          .map(c => ({
+            ...c,
+            author: getUser(c.authorId),
+            replies: replies.value
+              .filter(r => r.commentId === c.id)
+              .map(r => ({ ...r, author: getUser(r.authorId) })),
+          }))
+      : []
+    return {
+      ...photo,
+      canView,
+      visibilityLabel: getVisibilityLabel(photo.visibility),
+      uploader,
+      feed,
+      comments: photoComments,
+    }
+  }
+
+  // 获取同学资料详情
+  function getClassmateDetail(userId: string) {
+    const user = getUser(userId)
+    if (!user) return null
+    const status = getFriendshipStatus(userId)
+    const mutualFriends = getMutualFriends(userId)
+    const userFriendCount = getFriendIdsOf(userId).length
+    const recentFeeds = feeds.value
+      .filter(f => f.authorId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 5)
+      .map(f => ({
+        ...f,
+        photos: getAllPhotosForFeed(f.id),
+        commentCount: getCommentCount(f.id),
+        likeCount: likes.value.filter(l => l.feedId === f.id).length,
+      }))
+    const userPhotos = photos.value.filter(p => p.uploadedBy === userId && canViewPhoto(p))
+    return {
+      ...user,
+      status,
+      mutualFriends,
+      userFriendCount,
+      recentFeeds,
+      userPhotos,
+    }
   }
 
   // 搜索同学
@@ -192,7 +243,6 @@ export const useSocialStore = defineStore('social', () => {
     })
   }
 
-  // 接受好友请求
   function acceptFriend(userId: string) {
     const f = friendships.value.find(
       f => f.fromId === userId && f.toId === CURRENT_USER_ID && f.status === 'pending'
@@ -200,7 +250,6 @@ export const useSocialStore = defineStore('social', () => {
     if (f) f.status = 'accepted'
   }
 
-  // 取消好友/拒绝请求
   function removeFriend(userId: string) {
     const idx = friendships.value.findIndex(
       f =>
@@ -210,7 +259,24 @@ export const useSocialStore = defineStore('social', () => {
     if (idx !== -1) friendships.value.splice(idx, 1)
   }
 
-  // 添加评论
+  // 点赞/取消点赞
+  function toggleLike(feedId: string) {
+    const idx = likes.value.findIndex(l => l.feedId === feedId && l.userId === CURRENT_USER_ID)
+    const feed = feeds.value.find(f => f.id === feedId)
+    if (idx !== -1) {
+      likes.value.splice(idx, 1)
+      if (feed) feed.likeCount = Math.max(0, feed.likeCount - 1)
+    } else {
+      likes.value.push({ id: `lk${Date.now()}`, feedId, userId: CURRENT_USER_ID })
+      if (feed) feed.likeCount++
+    }
+  }
+
+  function isLikedByMe(feedId: string): boolean {
+    return likes.value.some(l => l.feedId === feedId && l.userId === CURRENT_USER_ID)
+  }
+
+  // 评论
   function addComment(feedId: string, content: string) {
     comments.value.push({
       id: `c${Date.now()}`,
@@ -218,10 +284,10 @@ export const useSocialStore = defineStore('social', () => {
       authorId: CURRENT_USER_ID,
       content,
       createdAt: new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-'),
+      likeCount: 0,
     })
   }
 
-  // 添加回复
   function addReply(commentId: string, content: string) {
     replies.value.push({
       id: `r${Date.now()}`,
@@ -229,10 +295,10 @@ export const useSocialStore = defineStore('social', () => {
       authorId: CURRENT_USER_ID,
       content,
       createdAt: new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-'),
+      likeCount: 0,
     })
   }
 
-  // 更新照片可见性
   function updatePhotoVisibility(photoId: string, visibility: Visibility) {
     const photo = photos.value.find(p => p.id === photoId)
     if (photo && photo.uploadedBy === CURRENT_USER_ID) {
@@ -240,12 +306,8 @@ export const useSocialStore = defineStore('social', () => {
     }
   }
 
-  // 我的照片（相册）
-  const myPhotos = computed(() =>
-    photos.value.filter(p => p.uploadedBy === CURRENT_USER_ID)
-  )
+  const myPhotos = computed(() => photos.value.filter(p => p.uploadedBy === CURRENT_USER_ID))
 
-  // 获取动态的评论数
   function getCommentCount(feedId: string): number {
     const c = comments.value.filter(c => c.feedId === feedId).length
     const r = comments.value
@@ -254,37 +316,19 @@ export const useSocialStore = defineStore('social', () => {
     return c + r
   }
 
+  function getLikeCount(feedId: string): number {
+    return likes.value.filter(l => l.feedId === feedId).length
+  }
+
   return {
-    users,
-    friendships,
-    feeds,
-    photos,
-    comments,
-    replies,
-    currentUser,
-    friendList,
-    pendingReceived,
-    pendingSent,
-    classmateList,
-    friendCount,
-    pendingRequestCount,
-    publicPhotoCount,
-    totalCommentCount,
-    feedList,
-    myPhotos,
-    getUser,
-    isFriend,
-    getFriendshipStatus,
-    getVisiblePhotosForFeed,
-    getAllPhotosForFeed,
-    getFeedDetail,
-    searchClassmates,
-    addFriend,
-    acceptFriend,
-    removeFriend,
-    addComment,
-    addReply,
-    updatePhotoVisibility,
-    getCommentCount,
+    users, friendships, feeds, photos, comments, replies, likes,
+    currentUser, friendList, pendingReceived, pendingSent, classmateList,
+    friendCount, pendingRequestCount, publicPhotoCount, totalCommentCount, totalLikeCount,
+    feedList, myPhotos,
+    getUser, isFriend, getFriendshipStatus, getMutualFriends,
+    getVisiblePhotosForFeed, getAllPhotosForFeed, getFeedDetail, getPhotoDetail, getClassmateDetail,
+    searchClassmates, addFriend, acceptFriend, removeFriend,
+    toggleLike, isLikedByMe, addComment, addReply, updatePhotoVisibility,
+    getCommentCount, getLikeCount, canViewPhoto, getVisibilityLabel,
   }
 })

@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onActivated } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSocialStore } from '@/stores/social'
 import { Search, UserPlus, UserMinus, UserCheck, Clock } from 'lucide-vue-next'
 
+const router = useRouter()
 const store = useSocialStore()
+
+// 保留搜索/筛选状态（keep-alive 场景下自动保留，此处也用 ref 持久化）
 const searchKeyword = ref('')
 const activeTab = ref<'all' | 'friends' | 'pending'>('all')
 
@@ -84,7 +88,8 @@ function getStatusInfo(userId: string) {
       <div
         v-for="classmate in filteredClassmates"
         :key="classmate.id"
-        class="bg-white rounded-lg shadow-sm p-3 flex items-center justify-between hover:shadow-md transition-shadow"
+        class="bg-white rounded-lg shadow-sm p-3 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer"
+        @click="router.push(`/classmate/${classmate.id}`)"
       >
         <div class="flex items-center gap-3">
           <div
@@ -100,7 +105,7 @@ function getStatusInfo(userId: string) {
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2" @click.stop>
           <span
             class="text-xs px-2 py-0.5 rounded"
             :class="store.isFriend(classmate.id) ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400'"
@@ -119,8 +124,6 @@ function getStatusInfo(userId: string) {
       </div>
     </div>
 
-    <div v-if="filteredClassmates.length === 0" class="text-center text-gray-400 py-12">
-      未找到匹配的同学
-    </div>
+    <div v-if="filteredClassmates.length === 0" class="text-center text-gray-400 py-12">未找到匹配的同学</div>
   </div>
 </template>
